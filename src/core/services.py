@@ -61,3 +61,62 @@ class ConfigurationService:
         config_path = os.path.join(project_root, CONFIG_FILE_NAME)
         serialized_data = self._serializer.serialize(config)
         await self._fs_adapter.write_file(config_path, serialized_data)
+
+import json
+from typing import List
+
+from .models import Target
+
+# ... (keep existing ConfigurationService code) ...
+
+class DiscoveryService:
+    """Scans for and parses potential targets from build artifacts."""
+
+    def __init__(self, fs_adapter: IFileSystemAdapter):
+        """
+        Initializes the DiscoveryService.
+
+        Args:
+            fs_adapter: An object that implements the IFileSystemAdapter interface.
+        """
+        self._fs_adapter = fs_adapter
+
+    async def discover_targets(self, project_root: str) -> List[Target]:
+        """
+        Discovers all potential targets in a project.
+
+        Args:
+            project_root: The root directory of the project to scan.
+
+        Returns:
+            A list of discovered Target objects.
+        """
+        package_json_targets = await self._discover_from_package_json(project_root)
+        # In the future, we will add calls to discover from Makefiles, etc.
+        # and combine the results here.
+        return package_json_targets
+
+    async def _discover_from_package_json(self, project_root: str) -> List[Target]:
+        """Discovers targets from package.json files."""
+        targets = []
+        package_json_files = await self._fs_adapter.find_files(
+            "**/package.json", project_root
+        )
+
+        for file_path in package_json_files:
+            try:
+                content = await self._fs_adapter.read_file(file_path)
+                data = json.loads(content)
+                scripts = data.get("scripts", {})
+                for name, command in scripts.items():
+                    targets.append(
+                        Target(
+                            name=name,
+                            command=f"npm run {name}",
+                            source_file=file_path,
+                        )
+                    )
+            except (json.JSONDecodeError, KeyError):
+                # Ignore malformed package.json files or files without a scripts section
+                continue
+        return targets
