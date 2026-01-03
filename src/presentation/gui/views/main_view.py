@@ -121,8 +121,9 @@ class MainView(wx.Frame):
 
         if dialog.ShowModal() == wx.ID_OK:
             project_path = dialog.GetPath()
-            # Call presenter asynchronously
-            asyncio.create_task(self.presenter.load_project(project_path))
+            # Get the event loop from the current thread and schedule the coroutine
+            loop = asyncio.get_event_loop()
+            asyncio.ensure_future(self.presenter.load_project(project_path), loop=loop)
 
         dialog.Destroy()
 
