@@ -2,5 +2,8 @@ wxPython
 textual
 pytest
 pytest-asyncio
+pytest-xvfb
+pytest-mock
+pywinauto
 PyYAML
 aiofiles
