@@ -6,10 +6,12 @@ It is "dumb" and delegates all business logic to the MainPresenter.
 """
 import wx
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
     from src.presentation.gui.presenters.main_presenter import MainPresenter
+
+from src.core.models import Target
 
 
 class MainView(wx.Frame):
@@ -41,8 +43,12 @@ class MainView(wx.Frame):
 
         self.presenter = presenter
 
+        # Store targets for selection tracking
+        self._targets: List[Target] = []
+
         # Create UI components
         self._create_menu_bar()
+        self._create_main_panel()
         self._create_status_bar()
 
         # Center the window on screen
@@ -73,6 +79,27 @@ class MainView(wx.Frame):
 
         menu_bar.Append(file_menu, "&File")
         self.SetMenuBar(menu_bar)
+
+    def _create_main_panel(self) -> None:
+        """Create the main panel with target list."""
+        panel = wx.Panel(self)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # Create target list control
+        self.target_list = wx.ListCtrl(
+            panel,
+            style=wx.LC_REPORT | wx.LC_SINGLE_SEL
+        )
+
+        # Add columns
+        self.target_list.AppendColumn("Name", width=150)
+        self.target_list.AppendColumn("Command", width=400)
+        self.target_list.AppendColumn("Source File", width=200)
+
+        # Add to sizer
+        sizer.Add(self.target_list, 1, wx.ALL | wx.EXPAND, 5)
+
+        panel.SetSizer(sizer)
 
     def _create_status_bar(self) -> None:
         """Create the status bar."""
@@ -138,3 +165,38 @@ class MainView(wx.Frame):
             wx.OK | wx.ICON_ERROR,
             self
         )
+
+    def update_target_list(self, targets: List[Target]) -> None:
+        """
+        Update the target list with new targets.
+
+        Args:
+            targets: List of Target objects to display
+        """
+        # Store targets for selection tracking
+        self._targets = targets
+
+        # Clear existing items
+        self.target_list.DeleteAllItems()
+
+        # Add new items
+        for target in targets:
+            index = self.target_list.InsertItem(self.target_list.GetItemCount(), target.name)
+            self.target_list.SetItem(index, 1, target.command)
+            self.target_list.SetItem(index, 2, target.source_file)
+
+    def get_selected_target(self) -> Optional[Target]:
+        """
+        Get the currently selected target.
+
+        Returns:
+            The selected Target object, or None if nothing is selected
+        """
+        selected_index = self.target_list.GetFirstSelected()
+        if selected_index == -1:
+            return None
+
+        if 0 <= selected_index < len(self._targets):
+            return self._targets[selected_index]
+
+        return None

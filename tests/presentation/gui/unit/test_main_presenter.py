@@ -164,3 +164,68 @@ class TestMainPresenter:
 
         # Verify
         assert project_name == "Test Project"
+
+    def test_get_targets_returns_empty_list_when_no_project_loaded(self, mock_project_service, mock_view):
+        """
+        Test 8: get_targets() returns empty list when no project is loaded.
+        """
+        from src.presentation.gui.presenters.main_presenter import MainPresenter
+
+        # Setup
+        mock_project_service.get_config.return_value = None
+        presenter = MainPresenter(mock_project_service, mock_view)
+
+        # Execute
+        targets = presenter.get_targets()
+
+        # Verify
+        assert targets == []
+
+    def test_get_targets_returns_target_list_when_project_loaded(self, mock_project_service, mock_view):
+        """
+        Test 9: get_targets() returns the list of targets when project is loaded.
+        """
+        from src.presentation.gui.presenters.main_presenter import MainPresenter
+
+        # Setup
+        target1 = Target(name="build", command="npm run build", source_file="package.json")
+        target2 = Target(name="test", command="npm test", source_file="package.json")
+        mock_config = ProjectConfig(project_name="Test Project", targets=[target1, target2])
+        mock_project_service.get_config.return_value = mock_config
+        presenter = MainPresenter(mock_project_service, mock_view)
+
+        # Execute
+        targets = presenter.get_targets()
+
+        # Verify
+        assert len(targets) == 2
+        assert targets[0].name == "build"
+        assert targets[1].name == "test"
+
+    @pytest.mark.asyncio
+    async def test_load_project_updates_target_list_in_view(self, mock_project_service, mock_view):
+        """
+        Test 10: After loading project, the view's target list is updated.
+        """
+        from src.presentation.gui.presenters.main_presenter import MainPresenter
+
+        # Setup
+        project_root = "/test/project"
+        target1 = Target(name="build", command="npm run build", source_file="package.json")
+        target2 = Target(name="test", command="npm test", source_file="package.json")
+        mock_config = ProjectConfig(project_name="Test Project", targets=[target1, target2])
+        mock_project_service.load_project.return_value = mock_config
+        mock_project_service.get_config.return_value = mock_config
+        mock_view.update_target_list = Mock()
+
+        presenter = MainPresenter(mock_project_service, mock_view)
+
+        # Execute
+        await presenter.load_project(project_root)
+
+        # Verify
+        mock_view.update_target_list.assert_called_once()
+        call_args = mock_view.update_target_list.call_args[0][0]
+        assert len(call_args) == 2
+        assert call_args[0].name == "build"
+        assert call_args[1].name == "test"

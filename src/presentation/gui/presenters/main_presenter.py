@@ -5,8 +5,9 @@ This presenter handles the business logic for the main application window,
 coordinating between the view and the core services. It is fully testable
 without requiring wx.App instantiation.
 """
-from typing import Optional
+from typing import Optional, List
 from src.core.services import ProjectService
+from src.core.models import Target
 
 
 class MainPresenter:
@@ -48,9 +49,10 @@ class MainPresenter:
             # Load the project via the service
             config = await self.project_service.load_project(project_root)
 
-            # Update the view with the project name
+            # Update the view with the project name and targets
             if config:
                 self.view.set_project_name(config.project_name)
+                self.view.update_target_list(config.targets)
                 self.view.set_status(f"Project '{config.project_name}' loaded successfully")
 
         except Exception as e:
@@ -69,3 +71,15 @@ class MainPresenter:
         if config:
             return config.project_name
         return None
+
+    def get_targets(self) -> List[Target]:
+        """
+        Get the list of targets from the currently loaded project.
+
+        Returns:
+            List of Target objects if a project is loaded, empty list otherwise
+        """
+        config = self.project_service.get_config()
+        if config:
+            return config.targets
+        return []
