@@ -2,3 +2,5 @@ wxPython
 textual
 pytest
 pytest-asyncio
+PyYAML
+aiofiles
