@@ -182,3 +182,91 @@ class ExecutionService:
         """
         with self._lock:
             return list(self._running_processes.keys())
+
+class ProjectService:
+    """
+    Acts as the primary entry point for the UI layer, orchestrating the other
+    services to provide a unified API for all project-related operations.
+    """
+
+    def __init__(
+        self,
+        config_service: ConfigurationService,
+        discovery_service: DiscoveryService,
+        execution_service: ExecutionService,
+    ):
+        """
+        Initializes the ProjectService facade.
+
+        Args:
+            config_service: An instance of ConfigurationService.
+            discovery_service: An instance of DiscoveryService.
+            execution_service: An instance of ExecutionService.
+        """
+        self._config_service = config_service
+        self._discovery_service = discovery_service
+        self._execution_service = execution_service
+        self._project_root: Optional[str] = None
+        self._config: Optional[ProjectConfig] = None
+
+    async def load_project(self, project_root: str) -> Optional[ProjectConfig]:
+        """
+        Loads a project, either from a config file or by discovering targets.
+        If no config file exists, a new one is created and saved.
+
+        Args:
+            project_root: The absolute path to the project's root directory.
+
+        Returns:
+            The loaded or newly created ProjectConfig.
+        """
+        self._project_root = project_root
+        config = await self._config_service.load_config(project_root)
+
+        if config:
+            self._config = config
+        else:
+            # No config file found, so discover targets and create a new config
+            discovered_targets = await self._discovery_service.discover_targets(
+                project_root
+            )
+            project_name = os.path.basename(project_root)
+            new_config = ProjectConfig(
+                project_name=project_name, targets=discovered_targets
+            )
+            await self._config_service.save_config(project_root, new_config)
+            self._config = new_config
+
+        return self._config
+
+    def run_target(self, target_id: str) -> int:
+        """
+        Runs a target by its ID.
+
+        Args:
+            target_id: The ID of the target to run.
+
+        Returns:
+            The PID of the started process.
+
+        Raises:
+            ValueError: If the project is not loaded or the target ID is not found.
+        """
+        if not self._config or not self._project_root:
+            raise ValueError("Project not loaded.")
+
+        target_to_run = next((t for t in self._config.targets if t.id == target_id), None)
+
+        if not target_to_run:
+            raise ValueError(f"Target with ID '{target_id}' not found.")
+
+        shell = self._config.shell or self._execution_service._shell_adapter.get_system_shell()
+        return self._execution_service.run_target(target_to_run, self._project_root, shell)
+
+    def cancel_target(self, pid: int):
+        """Cancels a running target by its PID."""
+        self._execution_service.cancel_target(pid)
+
+    def get_config(self) -> Optional[ProjectConfig]:
+        """Returns the currently loaded project configuration."""
+        return self._config
