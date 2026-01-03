@@ -80,21 +80,28 @@ class DashboardApp(wx.App):
 
     def _setup_event_loop(self):
         """
-        Setup the asyncio event loop.
+        Setup the asyncio event loop to work with wxPython.
 
-        This ensures async operations (like loading projects) work correctly
-        with the wxPython event loop.
+        This integrates asyncio with wxPython's event loop so async operations
+        work correctly.
         """
-        try:
-            # Try to get the existing event loop
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            # If no loop exists, create a new one
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+        # Create a new event loop for this thread
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
 
-        # The event loop will be managed by asyncio.create_task() calls
-        # from the view and presenter
+        # Schedule periodic execution of asyncio tasks
+        self.timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._run_async_tasks, self.timer)
+        self.timer.Start(10)  # Run every 10ms
+
+    def _run_async_tasks(self, event):
+        """
+        Run pending asyncio tasks.
+
+        Called periodically by wx.Timer to process asyncio coroutines.
+        """
+        self.loop.stop()
+        self.loop.run_forever()
 
 
 def main():
