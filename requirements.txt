@@ -1,0 +1,4 @@
+wxPython
+textual
+pytest
+pytest-asyncio
