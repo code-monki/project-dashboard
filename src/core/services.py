@@ -51,9 +51,10 @@ class DiscoveryService:
         # Discover from all supported sources
         package_json_targets = await self._discover_from_package_json(project_root)
         makefile_targets = await self._discover_from_makefiles(project_root)
+        script_targets = await self._discover_from_scripts(project_root)
 
         # Combine all targets
-        all_targets = package_json_targets + makefile_targets
+        all_targets = package_json_targets + makefile_targets + script_targets
         return all_targets
 
     async def _discover_from_package_json(self, project_root: str) -> List[Target]:
@@ -122,6 +123,63 @@ class DiscoveryService:
             except Exception:
                 # Silently skip malformed Makefiles
                 continue
+
+        return targets
+
+    async def _discover_from_scripts(self, project_root: str) -> List[Target]:
+        """
+        Discover executable scripts (shell and Python).
+
+        Finds .sh and .py files and creates targets that can be executed.
+        Excludes common non-script files like setup.py, __init__.py, etc.
+
+        Args:
+            project_root: The root directory of the project
+
+        Returns:
+            List of Target objects representing executable scripts
+        """
+        targets = []
+
+        # Files to exclude from script discovery
+        excluded_patterns = [
+            'setup.py',
+            '__init__.py',
+            'conftest.py',
+        ]
+
+        # Discover shell scripts (.sh files)
+        shell_scripts = await self._fs_adapter.find_files("**/*.sh", project_root)
+        for script_path in shell_scripts:
+            script_name = os.path.basename(script_path)
+            targets.append(
+                Target(
+                    name=script_name,
+                    command=f"bash {script_path}",
+                    source_file=script_path,
+                )
+            )
+
+        # Discover Python scripts (.py files)
+        python_scripts = await self._fs_adapter.find_files("**/*.py", project_root)
+        for script_path in python_scripts:
+            script_name = os.path.basename(script_path)
+
+            # Skip excluded files
+            if script_name in excluded_patterns:
+                continue
+
+            # Skip files in common Python package directories
+            if '/src/' in script_path or '/tests/' in script_path or '/__pycache__/' in script_path:
+                continue
+
+            targets.append(
+                Target(
+                    name=script_name,
+                    command=f"python {script_path}",
+                    source_file=script_path,
+                )
+            )
 
         return targets
 

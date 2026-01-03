@@ -70,11 +70,13 @@ async def test_discover_handles_malformed_package_json(discovery_service, mock_f
     """
     project_root = "/fake/project"
     package_json_path = f"{project_root}/package.json"
-    
+
     mock_fs_adapter.files[package_json_path] = "this is not valid json"
-    
+
     async def mock_find_files(pattern, root):
-        return [package_json_path]
+        if pattern == "**/package.json":
+            return [package_json_path]
+        return []
     mock_fs_adapter.find_files = mock_find_files
 
     targets = await discovery_service.discover_targets(project_root)
@@ -94,7 +96,9 @@ async def test_discover_handles_package_json_with_no_scripts(discovery_service, 
     mock_fs_adapter.files[package_json_path] = json.dumps(mock_package_json)
 
     async def mock_find_files(pattern, root):
-        return [package_json_path]
+        if pattern == "**/package.json":
+            return [package_json_path]
+        return []
     mock_fs_adapter.find_files = mock_find_files
 
     targets = await discovery_service.discover_targets(project_root)
@@ -196,4 +200,105 @@ async def test_discover_handles_empty_makefile(discovery_service, mock_fs_adapte
 
     targets = await discovery_service.discover_targets(project_root)
     # Should still work, just return empty or only package.json targets
+    assert isinstance(targets, list)
+
+
+# Script File Discovery Tests
+
+async def test_discover_from_shell_scripts_finds_targets(discovery_service, mock_fs_adapter):
+    """
+    Test: DiscoveryService finds and parses executable shell scripts.
+    """
+    project_root = "/fake/project"
+    script1_path = f"{project_root}/scripts/build.sh"
+    script2_path = f"{project_root}/deploy.sh"
+
+    mock_fs_adapter.files[script1_path] = "#!/bin/bash\necho 'Building...'"
+    mock_fs_adapter.files[script2_path] = "#!/bin/bash\necho 'Deploying...'"
+
+    async def mock_find_files(pattern, root):
+        if pattern == "**/*.sh":
+            return [script1_path, script2_path]
+        return []
+    mock_fs_adapter.find_files = mock_find_files
+
+    targets = await discovery_service.discover_targets(project_root)
+
+    script_targets = [t for t in targets if t.source_file.endswith('.sh')]
+    assert len(script_targets) >= 2
+
+    target_names = [t.name for t in script_targets]
+    assert "build.sh" in target_names
+    assert "deploy.sh" in target_names
+
+    # Verify command format
+    build_target = next(t for t in script_targets if t.name == "build.sh")
+    assert build_target.command == f"bash {script1_path}"
+    assert build_target.source_file == script1_path
+
+
+async def test_discover_from_python_scripts_finds_targets(discovery_service, mock_fs_adapter):
+    """
+    Test: DiscoveryService finds and parses executable Python scripts.
+    """
+    project_root = "/fake/project"
+    script_path = f"{project_root}/scripts/run_tests.py"
+
+    mock_fs_adapter.files[script_path] = "#!/usr/bin/env python3\nprint('Running tests')"
+
+    async def mock_find_files(pattern, root):
+        if pattern == "**/*.py":
+            return [script_path]
+        return []
+    mock_fs_adapter.find_files = mock_find_files
+
+    targets = await discovery_service.discover_targets(project_root)
+
+    python_targets = [t for t in targets if t.source_file.endswith('.py')]
+    assert len(python_targets) >= 1
+
+    test_target = python_targets[0]
+    assert test_target.name == "run_tests.py"
+    assert test_target.command == f"python {script_path}"
+    assert test_target.source_file == script_path
+
+
+async def test_discover_from_scripts_handles_multiple_types(discovery_service, mock_fs_adapter):
+    """
+    Test: DiscoveryService discovers both shell and Python scripts.
+    """
+    project_root = "/fake/project"
+    sh_script = f"{project_root}/build.sh"
+    py_script = f"{project_root}/test.py"
+
+    mock_fs_adapter.files[sh_script] = "#!/bin/bash\necho 'Build'"
+    mock_fs_adapter.files[py_script] = "#!/usr/bin/env python3\nprint('Test')"
+
+    async def mock_find_files(pattern, root):
+        if pattern == "**/*.sh":
+            return [sh_script]
+        elif pattern == "**/*.py":
+            return [py_script]
+        return []
+    mock_fs_adapter.find_files = mock_find_files
+
+    targets = await discovery_service.discover_targets(project_root)
+
+    target_names = [t.name for t in targets]
+    assert "build.sh" in target_names
+    assert "test.py" in target_names
+
+
+async def test_discover_handles_no_scripts(discovery_service, mock_fs_adapter):
+    """
+    Test: DiscoveryService handles projects with no script files gracefully.
+    """
+    project_root = "/fake/project"
+
+    async def mock_find_files(pattern, root):
+        return []
+    mock_fs_adapter.find_files = mock_find_files
+
+    targets = await discovery_service.discover_targets(project_root)
+    # Should return empty list when no scripts found
     assert isinstance(targets, list)
